@@ -1,15 +1,9 @@
-"""
-Inverse-Free Algorithm for WMMSE.
-Author: zfh
-Date: 2024.1.4
-"""
 
-# <editor-fold desc="Import Packages">
 from util import *
 import torch
 import torch.nn as nn
+from RealComplex import real_block_to_complex, complex_to_real_block
 
-# </editor-fold>
 
 
 # <editor-fold desc="Define the parameters">
@@ -288,7 +282,8 @@ for i in range(nr_of_batches_training):
 
         profit.append(
             compute_WSR_neural_network(channel_input, initial_transmitter_precoder, Noise_Power, user_weights,
-                                       batch_size))
+                                       batch_size)
+            )
 
         if loop == (nr_of_iterations_nn - 2.0):
 
@@ -307,6 +302,7 @@ for i in range(nr_of_batches_training):
             # compute the WSR given by transmitter_precoder_to_use
             WSR_from_V_previous_iteration = compute_WSR_neural_network(channel_input, initial_transmitter_precoder,
                                                                        Noise_Power, user_weights, batch_size)
+    
 
     WSR = sum(profit)
     WSR_final = profit[-1]
@@ -317,7 +313,12 @@ for i in range(nr_of_batches_training):
     optimizer.zero_grad()  # clear gradients for this training step
     Loss.backward()  # backpropagation, compute gradients
     optimizer.step()  # apply gradients optimization
+    
+    if i == 2:
+        Precoder = real_block_to_complex( initial_transmitter_precoder.to('cpu').detach().numpy() )
+        Channel = real_block_to_complex( channel_input.to('cpu').detach().numpy() )
+        print("shape of Channel:", Channel.shape)
+        print("test of channel:", Channel[0,0,:,:])
+        print("shape of Precoder:", Precoder.shape)
+            
 
-# print("The WSR achieved with unfolded matrix-inverse-free WMMSE is: ", np.mean(WSR_nn))
-# print("The WSR achieved with the WMMSE algorithm is: ", WSR_WMMSE_batch/(nr_of_samples_per_batch*nr_of_batches_test))
-# </editor-fold>

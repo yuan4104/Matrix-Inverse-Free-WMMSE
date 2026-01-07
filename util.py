@@ -32,12 +32,12 @@ J_v = 4  # number of inner iterations for the transmitter precoder
 # For the WMMSE
 epsilon = 0.0001  # used to end the iterations of the WMMSE algorithm in Shi et al. when the number of iterations is not fixed (note that the stopping criterion has precendence over the fixed number of iterations)
 power_tolerance = 0.0001  # used to end the bisection search in the WMMSE algorithm in Shi et al.
-nr_of_iterations_WMMSE = nr_of_iterations  # for WMMSE algorithm in Shi et al.
+nr_of_iterations_WMMSE = nr_of_iterations   # for WMMSE algorithm in Shi et al.
 learning_rate = 0.001
 
 # For the matrix-inverse-free WMMSE
-nr_of_batches_training = 10000  # used for training
-nr_of_batches_test = 1000  # used for testing
+nr_of_batches_training = 1000  # used for training
+nr_of_batches_test = 100  # used for testing
 nr_of_samples_per_batch = 100
 batch_size = nr_of_samples_per_batch
 
@@ -310,7 +310,7 @@ def compute_P(Phi_diag_elements, Sigma_diag_elements, mu):
 # precoder, which are used as input in the computation graph of the unfolded matrix-inverse-free WMMSE.
 def compute_channel(nr_of_BS_antennas, nr_of_users, total_power=Total_Power, noise_power=Noise_Power):
     """
-      Compute a channel realization and returns it in two formats, one for the WMMSE and one for the unfolded
+    Compute a channel realization and returns it in two formats, one for the WMMSE and one for the unfolded
     :param noise_power: power of noise
     :param nr_of_BS_antennas: number of BS antennas
     :param nr_of_users: number of users
@@ -774,22 +774,27 @@ def GD_step_U_line_search_more_streams_Nesterov(init, init_momentum1, init_momen
 # <editor-fold desc="Test the unit">
 if __name__ == '__main__':
     # Only for testing the functions
+    
     channel_nn, initial_transmitter_precoder, initial_receiver_precoder, channel_WMMSE, initial_transmitter_precoder_WMMSE = compute_channel(
         nr_of_BS_antennas, nr_of_users, Total_Power, Noise_Power)
     # channel_nn[i] indicates the channel matrix of the i-th user in the format of numpy array
     channel_nn_torch = torch.zeros((1, nr_of_users, 2 * nr_of_UE_antennas, 2 * nr_of_BS_antennas))
     initial_transmitter_torch = torch.zeros((1, nr_of_users, 2 * nr_of_BS_antennas, 2 * nr_of_data_streams))
     initial_receiver_torch = torch.zeros((1, nr_of_users, 2 * nr_of_UE_antennas, 2 * nr_of_data_streams))
+    
     for i in range(nr_of_users):
         channel_nn_torch[0, i, :, :] = torch.tensor(channel_nn[i])
         initial_transmitter_torch[0, i, :, :] = torch.tensor(initial_transmitter_precoder[i])
         initial_receiver_torch[0, i, :, :] = torch.tensor(initial_receiver_precoder[i])
-    # print(channel_nn[0].shape, initial_transmitter_precoder[0].shape, initial_receiver_precoder[0].shape,
-    #       channel_WMMSE.shape, initial_transmitter_precoder_WMMSE.shape)
+        print(channel_nn[0].shape, initial_transmitter_precoder[0].shape, initial_receiver_precoder[0].shape,
+           channel_WMMSE.shape, initial_transmitter_precoder_WMMSE.shape)
+        
     # print(channel_nn[0])
-    # print(channel_WMMSE[0])
+    print(channel_WMMSE[0])
+
+    print( "Channel Power: ", np.sum(np.abs(channel_WMMSE)**2) )
     # save channel
-    sio.savemat('H_WMMSE.mat', {'H_WMMSE': channel_WMMSE.transpose(1, 2, 0)})
+    # sio.savemat('H_WMMSE.mat', {'H_WMMSE': channel_WMMSE.transpose(1, 2, 0)})
 
     begin_time = time.time()
     last_V, last_U, last_W, last_WSR = run_WMMSE_MIMO_more_streams(epsilon, channel_WMMSE,
