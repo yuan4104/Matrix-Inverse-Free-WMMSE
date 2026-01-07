@@ -15,17 +15,17 @@ RATE_PARAMS = {
     16: {  # 16-QAM
         'SINR_bar': 30.902954325135887,
         'a': 0.314766863216191,
-        'b': 15.003936906075179,
+        'b':15.003936906075179,
         'a_k': [-0.003096076898619,0.022856434735149,-0.124149926339006,0.276742999284062,1.157338673346761,1.854053806047828e-04]
     },
     64: {  # 64-QAM
-        'SINR_bar': 1.202264434617414e+02,
+        'SINR_bar': 120.2264434617414,
         'a': 0.887098510455927,
         'b': 45.148109924238870,
         'a_k': [-0.001188038813624,0.005826572542931,-0.016233229294272,0.088510650534479,1.161644818418217,-0.002886977255888]
     },
     256: {  # 256-QAM
-        'SINR_bar': 4.466835921509630e+02,
+        'SINR_bar': 446.6835921509630,
         'a': 3.456128745639584,
         'b': 1.684156449600554e+02,
         'a_k': [-0.001053957564670,0.009856966964429,-0.027994898849416,0.059654398478049,1.186050827586518,-0.012418827670779]
@@ -33,7 +33,7 @@ RATE_PARAMS = {
 }
 
 
-def compute_piecewise_rate(SINR, M=16):
+def compute_rate(SINR, M=16):
     """
     Compute piecewise rate approximation: R_l / log2(M)
     
@@ -42,19 +42,7 @@ def compute_piecewise_rate(SINR, M=16):
     R_l/log2(M) = ⎨
                   ⎩ Σ(k=0 to 5) a_k * (ln(1+SINR))^k , SINR ≤ SINR_bar
     
-    Parameters:
-    -----------
-    SINR : np.ndarray
-        SINR values (can be any shape: scalar, vector, or multi-dimensional array)
-        Can be linear or dB scale (function assumes linear scale)
-    M : int
-        Modulation order (4, 16, 64, 256). Default is 16 (16-QAM)
-    
-    Returns:
-    --------
-    rate_normalized : np.ndarray
-        Normalized rate R_l / log2(M), same shape as SINR
-        To get actual rate R_l, multiply by log2(M)
+
     """
     if M not in RATE_PARAMS:
         raise ValueError(f"Modulation order M={M} not supported. Choose from {list(RATE_PARAMS.keys())}")
@@ -70,114 +58,31 @@ def compute_piecewise_rate(SINR, M=16):
     original_shape = SINR.shape
     
     # Initialize output
-    rate_normalized = np.zeros_like(SINR, dtype=np.float64)
+    rate = np.zeros_like(SINR, dtype=np.float64)
     
     # Case 1: SINR > SINR_bar (high SINR region)
-    mask_high = SINR > SINR_bar
+    mask_high = SINR >= SINR_bar
     if np.any(mask_high):
-        rate_normalized[mask_high] = 1.0 - a / (SINR[mask_high] - SINR_bar + b)
+        rate[mask_high] =np.log2(M) *( 1.0 - a / (SINR[mask_high] - SINR_bar + b) )
     
     # Case 2: SINR ≤ SINR_bar (low to medium SINR region)
     mask_low = ~mask_high
     if np.any(mask_low):
         SINR_low = SINR[mask_low]
-        ln_term = np.log(1.0 + SINR_low)
+        x = np.log(1.0 + SINR_low)
         
-        # Compute Σ(k=0 to 5) a_k * (ln(1+SINR))^k using vectorized np.polyval
-        # polyval requires coefficients in descending order (high to low power)
-        rate_sum = np.polyval(a_k, ln_term)
+        # Compute polynomial: sum(p.* [x.^5, x.^4, x.^3, x.^2, x, 1])
+        # This matches the fit_QAM function in g.m
+        rate_sum = (a_k[0] * x**5 + a_k[1] * x**4 + a_k[2] * x**3 + 
+                    a_k[3] * x**2 + a_k[4] * x + a_k[5])
         
-        rate_normalized[mask_low] = rate_sum
+        rate[mask_low] =  rate_sum
     
-    return rate_normalized
-
-
-def compute_actual_rate(SINR, M=16):
-    """
-    Compute actual rate R_l (in bits/symbol or bps/Hz).
-    
-    R_l = log2(M) * [R_l / log2(M)]
-    
-    Parameters:
-    -----------
-    SINR : np.ndarray
-        SINR values (linear scale)
-    M : int
-        Modulation order (4, 16, 64, 256)
-    
-    Returns:
-    --------
-    rate : np.ndarray
-        Actual rate R_l in bits/symbol
-    """
-    rate_normalized = compute_piecewise_rate(SINR, M)
-    rate = np.log2(M) * rate_normalized
     return rate
 
 
-U = 4  # number of users
-Nt = 8  # number of BS antennas
-Nr = 2  # number of UE antennas
-batch = 12  # batch size
-
-# Generate random channel and precoder matrices
-H = np.random.randn(batch, U, Nr, Nt) + 1j * np.random.randn(batch, U, Nr, Nt)
-P = np.random.randn(batch, U, Nt, Nr) + 1j * np.random.randn(batch, U, Nt, Nr)
-
-# User weights (sigma_k^2 in the formula)
- # You can customize this, e.g., np.random.rand(U)
 
 
-def compute_interference_covariance_matrix(H, P):
-    """
-    Compute the interference-plus-noise covariance matrix for each user.
-    
-    For user i: R_i = I + sum_{k≠i} σ_k^2 H_i P_k (H_i P_k)^H
-    
-    Parameters:
-    -----------
-    H : np.ndarray
-        Channel matrix with shape (batch, U, Nr, Nt)
-        H[b, i, :, :] is the channel from BS to user i in batch b
-    P : np.ndarray
-        Precoder matrix with shape (batch, U, Nt, Nr)
-        P[b, k, :, :] is the precoder for user k in batch b
-    sigma_squared : np.ndarray
-        User weights with shape (U,), typically all ones or specific weights
-    
-    Returns:
-    --------
-    R : np.ndarray
-        Interference-plus-noise covariance matrix with shape (batch, U, Nr, Nr)
-        R[b, i, :, :] is the covariance matrix for user i in batch b
-    """
-    batch_size, num_users, nr_ue, nt_bs = H.shape
-    
-    # Initialize R as identity matrices for each user in each batch
-    R = np.zeros((batch_size, num_users, nr_ue, nr_ue), dtype=np.complex128)
-    
-    sigma_squared = np.ones(num_users) 
-    
-    # Add identity matrix: R_i = I + ...
-    for b in range(batch_size):
-        for i in range(num_users):
-            R[b, i, :, :] = np.eye(nr_ue)
-    
-    # Compute interference terms: sum_{k≠i} σ_k^2 H_i P_k (H_i P_k)^H
-    for b in range(batch_size):
-        for i in range(num_users):
-            for k in range(num_users):
-                if k != i:
-                    # Compute H_i @ P_k
-                    HP = H[b, i, :, :] @ P[b, k, :, :]  # shape: (Nr, Nr)
-                    
-                    # Compute (H_i P_k) @ (H_i P_k)^H
-                    HP_HPh = HP @ HP.conj().T  # shape: (Nr, Nr)
-                    
-                    # Add weighted interference: σ_k^2 * (H_i P_k) (H_i P_k)^H
-                    R[b, i, :, :] += sigma_squared[k] * HP_HPh
-    
-    return R
 
 
 # Vectorized version (more efficient)
@@ -332,31 +237,35 @@ def SINR(C):
     result = C_diag_inv - 1.0
     # result shape: (batch, U, Nr)
     
-    return result
+    return np.real(result)
 
 
-
+def BICM_rate(H,P, M=16):
+    """
+    """
+    if M not in RATE_PARAMS:
+        raise ValueError(f"Modulation order M={M} not supported. Choose from {list(RATE_PARAMS.keys())}")
+    R = compute_interference_covariance_matrix_vectorized(H, P)
+    C = compute_C_matrix_vectorized(H, P, R)
+    sinr = SINR(C)
+    rate = compute_rate(sinr, M=M)
+    return np.mean(rate)
 
 
 
 if __name__ == "__main__":
-    modulation_orders = [4, 16, 64, 256]
-    SINR_range = np.logspace(-1, 2, 100)  # 0.1 to 100 (linear scale)
+    U = 4  # number of users
+    Nt = 8  # number of BS antennas
+    Nr = 2  # number of UE antennas
+    batch = 12  # batch size
+
+    # Generate random channel and precoder matrices
+    H = np.random.randn(batch, U, Nr, Nt) + 1j * np.random.randn(batch, U, Nr, Nt)
+    P = np.random.randn(batch, U, Nt, Nr) + 1j * np.random.randn(batch, U, Nt, Nr)
+
+
+    rate_16QAM = BICM_rate(H,P, M=4)
+    print("Rate shape:", np.mean(rate_16QAM))  # Average rate over batch and antennas
     
-    for k in range(6):
-        print(k)
-    
-    for M in modulation_orders:
-        rate = compute_actual_rate(SINR_range, M)
-        SINR_bar = RATE_PARAMS[M]['SINR_bar']
-        
-        # Find transition point
-        idx_transition = np.argmin(np.abs(SINR_range - SINR_bar))
-        
-        print(f"\nM = {M}:")
-        print(f"  Rate at SINR_bar ({SINR_bar:.1f}): {rate[idx_transition]:.4f} bits/symbol")
-        print(f"  Rate at SINR=1: {compute_actual_rate(1.0, M):.4f} bits/symbol")
-        print(f"  Rate at SINR=10: {compute_actual_rate(10.0, M):.4f} bits/symbol")
-        print(f"  Rate at SINR=50: {compute_actual_rate(50.0, M):.4f} bits/symbol")
 
 

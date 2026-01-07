@@ -3,6 +3,7 @@ from util import *
 import torch
 import torch.nn as nn
 from RealComplex import real_block_to_complex, complex_to_real_block
+from BICMFunction import BICM_rate
 
 
 
@@ -317,8 +318,13 @@ for i in range(nr_of_batches_training):
     if i == 2:
         Precoder = real_block_to_complex( initial_transmitter_precoder.to('cpu').detach().numpy() )
         Channel = real_block_to_complex( channel_input.to('cpu').detach().numpy() )
-        print("shape of Channel:", Channel.shape)
-        print("test of channel:", Channel[0,0,:,:])
-        print("shape of Precoder:", Precoder.shape)
+        Rate_QAM16 = BICM_rate(Channel,Precoder, M=16)
+        print("Rate 16QAM:", Rate_QAM16)
+        Rate_QAM64 = BICM_rate(Channel,Precoder, M=64)
+        print("Rate 64QAM:", Rate_QAM64)
+        Rate_QAM256 = BICM_rate(Channel,Precoder, M=256)
+        print("Rate 256QAM:", Rate_QAM256)
+        
+
             
 
